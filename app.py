@@ -845,13 +845,256 @@ def generate_html(employees_df, tasks_df):
             // Rest of the JavaScript functions from your original script go here
             // Function to determine if an employee can perform a task based on function matching
             function canEmployeePerformTask(employeeFunction, taskFunction) {{
-                // Implementation from your original script
+                // Parse employee function to extract the function number
+                const empFuncMatch = employeeFunction.match(/^(\d+)\./);
+                if (!empFuncMatch) return false;
+                
+                // Extract the function number (1, 2, 3, etc.)
+                const functionNumber = parseInt(empFuncMatch[1], 10);
+                
+                // Define the function codes based on employee function number
+                const employeeFunctionCodes = {{
+                    1: "CC",   // 1. Crew Chief -> CC
+                    2: "TL",   // 2. Teamleader -> TL
+                    3: "DC",   // 3. Deur Coördinator -> DC
+                    4: "A",    // 4. WH Agent A -> A
+                    5: "B",    // 5. WH Agent B -> B
+                    6: "C",    // 6. WH Agent C -> C
+                    7: "D",    // 7. WH Agent D -> D
+                    8: "E+",   // 8. WH Agent E+ -> E+
+                    9: "E"     // 9. WH Agent E -> E
+                }};
+                
+                // Get the employee's function code (CC, TL, DC, etc.)
+                const empFuncCode = employeeFunctionCodes[functionNumber] || "";
+                
+                // Define the function hierarchy based on your matrix
+                // Each function can perform certain tasks (their own and those below them)
+                const functionCapabilities = {{
+                    "CC": ["CC", "TL", "DC", "A", "B", "C", "D", "E+", "E"], // 1. Crew Chief can do all
+                    "TL": ["TL", "DC", "A", "B", "C", "D", "E+", "E"],      // 2. Teamleader can do all except CC
+                    "DC": ["DC", "A", "B", "C", "D", "E+", "E"],            // 3. Deur Coördinator can do all except CC, TL
+                    "A":  ["A", "B", "C", "D", "E+", "E"],                  // 4. WH Agent A choices
+                    "B":  ["B", "C", "D", "E+", "E"],                       // 5. WH Agent B choices
+                    "C":  ["C", "D", "E+", "E"],                            // 6. WH Agent C choices
+                    "D":  ["D", "E+", "E"],                                 // 7. WH Agent D choices
+                    "E+": ["E+", "E"],                                      // 8. WH Agent E+ choices
+                    "E":  ["E"]                                             // 9. WH Agent E choices
+                }};
+                
+                // Check if employee function exists in hierarchy
+                if (!functionCapabilities[empFuncCode]) {{
+                    console.error("Unknown employee function code:", empFuncCode, "from", employeeFunction);
+                    return false;
+                }}
+                
+                // Check if task function is in the list of functions the employee can perform
+                const canPerform = functionCapabilities[empFuncCode].includes(taskFunction);
+                
+                console.log(`Employee with function ${{employeeFunction}} (${{empFuncCode}}) ${{canPerform ? 'CAN' : 'CANNOT'}} perform task requiring ${{taskFunction}} function`);
+                
+                return canPerform;
             }}
 
             // Auto-allocate tasks function
             function autoAllocateTasks() {{
-                // Implementation from your original script
+    // Get the button and spinner
+    const button = document.getElementById('autoAllocateButton');
+    const spinner = document.getElementById('allocateSpinner');
+    
+    // Disable button and show spinner
+    button.disabled = true;
+    spinner.style.display = 'inline-block';
+    
+    // Get the current date, location, and period filter values
+    const selectedDate = document.getElementById('dateFilter').value;
+    const selectedLocation = document.getElementById('locationFilter').value;
+    const selectedPeriod = document.getElementById('periodFilter').value;
+    
+    if (selectedDate === 'all') {{
+        alert('Please select a specific date first');
+        button.disabled = false;
+        spinner.style.display = 'none';
+        return;
+    }}
+    
+    // Find all available tasks
+    let availableTasks = tasksData.filter(function(task) {{ 
+        const dayOfWeek = new Date(selectedDate).toLocaleString('nl-NL', {{weekday: 'long'}});
+        return task.Day.toLowerCase() === dayOfWeek.toLowerCase();
+    }});
+    
+    // Apply location filter if specified
+    if (selectedLocation !== 'all') {{
+        availableTasks = availableTasks.filter(function(task) {{
+            return task.Locatie && task.Locatie.toLowerCase() === selectedLocation.toLowerCase();
+        }});
+    }}
+    
+    // Apply period filter if specified
+    if (selectedPeriod !== 'all') {{
+        availableTasks = availableTasks.filter(function(task) {{
+            return task.Dagdeel === selectedPeriod;
+        }});
+    }}
+    
+    // Find all employees for the selected date
+    let availableEmployees = scheduleData.filter(function(employee) {{ 
+        return employee.Datum === selectedDate;
+    }});
+    
+    // Apply location filter if specified
+    if (selectedLocation !== 'all') {{
+        availableEmployees = availableEmployees.filter(function(employee) {{
+            return employee.Locatie === selectedLocation;
+        }});
+    }}
+    
+    // Apply period filter if specified
+    if (selectedPeriod !== 'all') {{
+        availableEmployees = availableEmployees.filter(function(employee) {{
+            return employee.Dagdeel === selectedPeriod;
+        }});
+    }}
+    
+    // First, clear all existing task assignments for the filtered employees
+    clearTaskAssignments(selectedDate, availableEmployees);
+    
+    // Sort tasks by function hierarchy (CC, TL, DC, A, B, C, D, E+, E)
+    // This ensures higher-level tasks are allocated first
+    const functionOrder = {{
+        'CC': 1, 'TL': 2, 'DC': 3, 'A': 4, 'B': 5, 'C': 6, 'D': 7, 'E+': 8, 'E': 9
+    }};
+    
+    availableTasks.sort(function(a, b) {{
+        const funcA = functionOrder[a.Function] || 99;
+        const funcB = functionOrder[b.Function] || 99;
+        return funcA - funcB;
+    }});
+    
+    // Sort employees by function hierarchy (1. Crew Chief, 2. Teamleader, etc.)
+    // This ensures we try to assign tasks to higher-level employees first
+    availableEmployees.sort(function(a, b) {{
+        const empAMatch = a.Functie.match(/^(\d+)\./);
+        const empBMatch = b.Functie.match(/^(\d+)\./);
+        
+        const empALevel = empAMatch ? parseInt(empAMatch[1], 10) : 99;
+        const empBLevel = empBMatch ? parseInt(empBMatch[1], 10) : 99;
+        
+        return empALevel - empBLevel;
+    }});
+    
+    // For storing temporary assignments
+    const tempAssignments = new Map();
+    const assignedTaskIds = new Set();
+    const assignedEmployees = new Set(); // Keep track of employees who already have a task
+    
+    console.log(`Starting task allocation with ${{availableTasks.length}} tasks and ${{availableEmployees.length}} employees`);
+    
+    // First pass: Assign exactly one task per employee based on dagdeel match and function compatibility
+    for (const task of availableTasks) {{
+        if (assignedTaskIds.has(task.TaskId)) continue; // Skip already assigned tasks
+        
+        for (const employee of availableEmployees) {{
+            // Skip employees who already have a task assigned in this first pass
+            if (assignedEmployees.has(employee.Medewerkers)) continue;
+            
+            // Match periods (dagdeel) between employee and task
+            if (employee.Dagdeel !== task.Dagdeel) {{
+                continue; // Skip if periods don't match
             }}
+            
+            // Check if this employee can perform this task
+            if (canEmployeePerformTask(employee.Functie, task.Function)) {{
+                console.log(`Assigning task "${{task.TaskName}}" (${{task.Time}}) to employee ${{employee.Medewerkers}} - first task assignment`);
+                
+                // Create the key for this employee
+                const key = `${{employee.Medewerkers}}-${{employee.Datum}}`;
+                
+                // Get or create the task array for this employee
+                if (!tempAssignments.has(key)) {{
+                    tempAssignments.set(key, []);
+                }}
+                
+                // Assign this task to this employee
+                tempAssignments.get(key).push({{
+                    taskId: task.TaskId,
+                    taskData: task
+                }});
+                
+                assignedTaskIds.add(task.TaskId);
+                assignedEmployees.add(employee.Medewerkers); // Mark this employee as having a task
+                break; // Move to next task
+            }}
+        }}
+    }}
+    
+    console.log(`First pass completed. Initial assignments made.`);
+    
+    // Second pass: Consider time conflicts for additional task assignments
+    for (const task of availableTasks) {{
+        // Skip already assigned tasks
+        if (assignedTaskIds.has(task.TaskId)) continue;
+        
+        for (const employee of availableEmployees) {{
+            // Match periods (dagdeel) between employee and task
+            if (employee.Dagdeel !== task.Dagdeel) {{
+                continue; // Skip if periods don't match
+            }}
+            
+            // Check if this employee can perform this task
+            if (!canEmployeePerformTask(employee.Functie, task.Function)) {{
+                continue; // Skip if function incompatible
+            }}
+            
+            // Check for time conflicts with existing tasks
+            const key = `${{employee.Medewerkers}}-${{employee.Datum}}`;
+            const existingTasks = tempAssignments.get(key) || [];
+            
+            if (hasTimeConflict(existingTasks, task)) {{
+                console.log(`Time conflict detected in second pass for task "${{task.TaskName}}" (${{task.Time}}) - skipping employee ${{employee.Medewerkers}}`);
+                continue; // Skip if there's a time conflict
+            }}
+            
+            console.log(`Assigning additional task "${{task.TaskName}}" (${{task.Time}}) to employee ${{employee.Medewerkers}}`);
+            
+            // Get or create the task array for this employee
+            if (!tempAssignments.has(key)) {{
+                tempAssignments.set(key, []);
+            }}
+            
+            // Assign this task to this employee
+            tempAssignments.get(key).push({{
+                taskId: task.TaskId,
+                taskData: task
+            }});
+            
+            assignedTaskIds.add(task.TaskId);
+            break; // Move to next task
+        }}
+    }}
+    
+    console.log(`Second pass completed. Final assignments ready.`);
+    
+    // Now apply the temporary assignments to the actual data structure
+    // Clear existing assignments and add all from the temp map
+    taskAssignmentsByEmployee.clear();
+    
+    for (const [key, tasks] of tempAssignments.entries()) {{
+        taskAssignmentsByEmployee.set(key, tasks);
+    }}
+    
+    // Update the display
+    setTimeout(function() {{
+        updateDisplay();
+        button.disabled = false;
+        spinner.style.display = 'none';
+        
+        // Show success message
+        const totalAssigned = Array.from(taskAssignmentsByEmployee.values()).reduce((total, tasks) => total + tasks.length, 0);
+        alert(`Auto-allocation complete! ${{totalAssigned}} tasks have been assigned.`);
+    }}, 500);
+}}
 
             // Remaining JavaScript functions...
         }})();
