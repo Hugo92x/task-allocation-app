@@ -1105,18 +1105,48 @@ def generate_html(employees_df, tasks_df):
     
     return html_content
 
-# Function to create a download link for the HTML file
+# Improve the download link function to make it more prominent
 def get_download_link(html_content, filename="task_allocation.html"):
     """Generates a link to download the HTML file"""
     b64 = base64.b64encode(html_content.encode()).decode()
-    href = f'<a href="data:text/html;base64,{b64}" download="{filename}">Download HTML file</a>'
-    return href
+    href = f'<a href="data:text/html;base64,{b64}" download="{filename}" class="download-button">Download Task Allocation Interface</a>'
+    
+    # Add some CSS to make the download button more prominent
+    button_css = """
+    <style>
+        .download-button {
+            display: inline-block;
+            padding: 12px 20px;
+            background-color: #4CAF50;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .download-button:hover {
+            background-color: #45a049;
+        }
+    </style>
+    """
+    
+    return button_css + href
 
 # Streamlit App
 st.set_page_config(page_title="Task Allocation App", layout="wide")
 
 st.title("Task Allocation Web App")
-st.write("Upload your Excel file with employee schedules and tasks to generate a task allocation interface.")
+
+# Add clearer instructions
+st.write("""
+## Instructions:
+1. Upload your Excel file below
+2. After processing, download the HTML file
+3. Open the downloaded file in your browser for the full interactive experience
+""")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload Excel file", type=['xlsx'])
@@ -1128,6 +1158,7 @@ if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
         tmp.write(uploaded_file.getvalue())
         tmp_path = tmp.name
+    
     try:
         with st.spinner("Processing file..."):
             # Process the file
@@ -1151,12 +1182,22 @@ if uploaded_file is not None:
                 tasks_by_day = tasks_df['Day'].value_counts().to_dict()
                 st.write("Tasks by day:", tasks_by_day)
             
-            # Display HTML content in an iframe
-            st.subheader("Task Allocation Interface")
-            st.components.v1.html(html_content, height=600, scrolling=True)
+            # Add a prominent download section
+            st.subheader("📥 Download Your Interactive Task Allocation Interface")
+            st.markdown("""
+            **For the best experience with full interactivity:**
+            1. Click the download button below
+            2. Open the downloaded HTML file in your browser
+            3. Enjoy all interactive features including drag-and-drop, auto-allocation, and timeline views
+            """)
             
             # Provide download link
             st.markdown(get_download_link(html_content), unsafe_allow_html=True)
+            
+            # Also show a preview (optional)
+            with st.expander("Show Preview (Limited Interactivity)"):
+                st.warning("Note: This preview has limited interactive functionality. For the full experience, download the HTML file.")
+                st.components.v1.html(html_content, height=600, scrolling=True)
             
     except Exception as e:
         st.error(f"Error processing the file: {str(e)}")
